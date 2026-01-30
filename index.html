@@ -2,293 +2,142 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SMOWL — Onchain Viewer (Shape)</title>
+  <title>SMOWL — Onchain Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Load ethers FIRST and defer -->
+  <script defer src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      margin: 0;
+      font-family: system-ui, sans-serif;
       background: #0b0b0b;
       color: #eaeaea;
-    }
-
-    header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 20px;
-      border-bottom: 1px solid #222;
-      background: #0f0f0f;
-    }
-
-    header h1 {
-      font-size: 18px;
       margin: 0;
-      font-weight: 600;
+      padding: 24px;
     }
-
-    main {
-      max-width: 900px;
-      margin: auto;
-      padding: 20px;
-    }
-
-    .panel {
-      background: #111;
-      border: 1px solid #222;
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-
-    .note {
-      background: #161616;
-      border: 1px solid #2a2a2a;
-      padding: 12px;
-      border-radius: 10px;
-      margin-bottom: 16px;
-      font-size: 13px;
-      color: #9aa0a6;
-    }
-
-    label {
-      display: block;
-      margin-top: 14px;
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    input {
-      width: 100%;
+    h1 { font-size: 20px; }
+    input, button {
       padding: 10px;
-      margin-top: 6px;
-      border: 1px solid #333;
-      border-radius: 10px;
-      background: #0c0c0c;
-      color: #eaeaea;
       font-size: 14px;
-    }
-
-    button {
-      margin-top: 16px;
-      padding: 10px 14px;
-      border-radius: 12px;
+      border-radius: 8px;
       border: none;
+    }
+    input {
+      width: 120px;
+      margin-right: 8px;
+    }
+    button {
+      cursor: pointer;
       background: #b6ff6b;
       color: #000;
       font-weight: 600;
-      cursor: pointer;
     }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    }
-
-    .small {
-      font-size: 12px;
-      color: #9aa0a6;
-    }
-
     pre {
-      background: #0c0c0c;
-      padding: 14px;
-      border-radius: 12px;
+      background: #111;
+      padding: 12px;
+      border-radius: 10px;
+      max-height: 300px;
       overflow: auto;
-      max-height: 420px;
-      font-size: 13px;
-      border: 1px solid #222;
+      margin-top: 16px;
     }
-
     img {
       max-width: 100%;
-      height: auto;
-      border-radius: 14px;
-      margin-top: 12px;
-      border: 1px solid #222;
+      margin-top: 16px;
+      border-radius: 12px;
       background: #000;
-    }
-
-    footer {
-      text-align: center;
-      padding: 16px;
-      font-size: 12px;
-      color: #666;
     }
   </style>
 </head>
 
 <body>
 
-<header>
-  <h1>SMOWL — Onchain Viewer (Shape)</h1>
-</header>
+<h1>SMOWL — Onchain Viewer (Shape)</h1>
 
-<main>
+<p class="small">
+Contract: <code>0xd74063355d6E0BcA71C821B731532B2fB72C76bc</code>
+</p>
 
-  <div class="note">
-    <div><strong>Collection:</strong> SMOWL</div>
-    <div class="mono small">
-      Contract: 0xd74063355d6E0BcA71C821B731532B2fB72C76bc<br/>
-      RPC: https://mainnet.shape.network • Chain ID: 360
-    </div>
-  </div>
+<div>
+  <input id="tokenId" value="1" />
+  <button onclick="loadSMOWL()">Load</button>
+</div>
 
-  <div class="panel">
-    <label>Token ID</label>
-    <input id="tokenId" value="1" />
+<pre id="output">idle</pre>
+<img id="image" />
 
-    <button id="load">Load SMOWL</button>
-
-    <div class="mono small" style="margin-top:10px">
-      <div id="w3token">(not loaded)</div>
-      <div id="w3image">(not loaded)</div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h3>tokenURI JSON</h3>
-    <pre id="jsonOut">(not loaded)</pre>
-  </div>
-
-  <div class="panel">
-    <h3>Rendered image</h3>
-    <img id="img" alt="(not loaded)" />
-  </div>
-
-</main>
-
-<footer>
-  SMOWL • Shape • web3://
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 <script>
-(function () {
+/**
+ * This is intentionally simple and defensive.
+ * No IIFEs, no DOM timing assumptions.
+ */
 
-  const CONTRACT = "0xd74063355d6E0BcA71C821B731532B2fB72C76bc";
-  const RPC_URL = "https://mainnet.shape.network";
-  const CHAIN_ID = 360;
+async function loadSMOWL() {
+  const out = document.getElementById("output");
+  const img = document.getElementById("image");
+  const tokenId = document.getElementById("tokenId").value;
 
-  const ABI = [
-    "function tokenURI(uint256 tokenId) view returns (string)",
-    "function image(uint256 tokenId) view returns (bytes)"
-  ];
+  out.textContent = "loading…";
+  img.removeAttribute("src");
 
-  const $ = (id) => document.getElementById(id);
-
-  function setBusy(busy) {
-    $("load").disabled = busy;
-    $("load").textContent = busy ? "Loading…" : "Load SMOWL";
+  if (typeof ethers === "undefined") {
+    out.textContent = "ERROR: ethers.js not loaded";
+    return;
   }
 
-  function shortenDataUri(s) {
-    if (typeof s !== "string") return s;
-    if (!s.startsWith("data:")) return s;
-    return s.length > 120 ? s.slice(0,120) + "...(trimmed)" : s;
-  }
+  try {
+    const CONTRACT = "0xd74063355d6E0BcA71C821B731532B2fB72C76bc";
+    const RPC = "https://mainnet.shape.network";
+    const CHAIN_ID = 360;
 
-  async function renderImage(parsedJson, tokenIdRaw) {
-    const imgEl = $("img");
-    imgEl.removeAttribute("src");
-    imgEl.alt = "Loading…";
+    const ABI = [
+      "function tokenURI(uint256) view returns (string)",
+      "function image(uint256) view returns (bytes)"
+    ];
 
-    const imageField = parsedJson && parsedJson.image;
+    const provider = new ethers.JsonRpcProvider(RPC, CHAIN_ID);
+    const contract = new ethers.Contract(CONTRACT, ABI, provider);
 
-    if (typeof imageField === "string" && imageField.startsWith("data:image/")) {
-      imgEl.src = imageField;
-      imgEl.alt = `SMOWL #${tokenIdRaw}`;
-      return;
-    }
-
-    if (typeof imageField === "string" && imageField.startsWith("web3://")) {
-      try {
-        const m = imageField.match(
-          /^web3:\\/\\/(0x[a-fA-F0-9]{40}):(\\d+)\\/image\\/(\\d+)$/
-        );
-        if (!m) throw new Error("Invalid web3 image URI");
-
-        const [, imgContractAddr, chainId, imgTokenId] = m;
-        if (Number(chainId) !== CHAIN_ID) throw new Error("Wrong chain");
-
-        const provider = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID);
-        const imgContract = new ethers.Contract(imgContractAddr, ABI, provider);
-
-        const imageHex = await imgContract.image(BigInt(imgTokenId));
-        const bytes = ethers.getBytes(imageHex);
-
-        const blob = new Blob([bytes], { type: "image/webp" });
-        imgEl.src = URL.createObjectURL(blob);
-        imgEl.alt = `SMOWL #${imgTokenId}`;
-        return;
-
-      } catch {
-        imgEl.alt = "Failed to load image";
-        return;
-      }
-    }
-
-    if (typeof imageField === "string") {
-      imgEl.src = imageField;
-      imgEl.alt = `SMOWL #${tokenIdRaw}`;
-      return;
-    }
-
-    imgEl.alt = "No image found.";
-  }
-
-  async function loadToken() {
-    const tokenIdRaw = $("tokenId").value.trim();
-    if (!tokenIdRaw || isNaN(Number(tokenIdRaw))) {
-      alert("Token ID must be a number");
-      return;
-    }
-
-    $("w3token").textContent =
-      `web3://${CONTRACT}:${CHAIN_ID}/tokenURI/${tokenIdRaw}`;
-    $("w3image").textContent =
-      `web3://${CONTRACT}:${CHAIN_ID}/image/${tokenIdRaw}`;
-
-    $("jsonOut").textContent = "Loading…";
-    $("img").removeAttribute("src");
-    setBusy(true);
+    const uri = await contract.tokenURI(BigInt(tokenId));
+    let parsed;
 
     try {
-      const provider = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID);
-      const contract = new ethers.Contract(CONTRACT, ABI, provider);
-
-      const jsonText = await contract.tokenURI(BigInt(tokenIdRaw));
-
-      let parsed = null;
-      try { parsed = JSON.parse(jsonText); } catch {}
-
-      if (parsed && typeof parsed === "object") {
-        const displayObj = JSON.parse(JSON.stringify(parsed));
-        if ("image" in displayObj)
-          displayObj.image = shortenDataUri(displayObj.image);
-        $("jsonOut").textContent = JSON.stringify(displayObj, null, 2);
-      } else {
-        $("jsonOut").textContent = jsonText;
-      }
-
-      await renderImage(parsed, tokenIdRaw);
-
-    } catch (err) {
-      $("jsonOut").textContent = `Error: ${err.message || err}`;
-      $("img").alt = "Error";
-    } finally {
-      setBusy(false);
+      parsed = JSON.parse(uri);
+      out.textContent = JSON.stringify(parsed, null, 2);
+    } catch {
+      out.textContent = uri;
+      return;
     }
+
+    // IMAGE HANDLING
+    if (parsed.image && parsed.image.startsWith("data:image")) {
+      img.src = parsed.image;
+      return;
+    }
+
+    if (parsed.image && parsed.image.startsWith("web3://")) {
+      const m = parsed.image.match(
+        /^web3:\\/\\/(0x[a-fA-F0-9]{40}):(\\d+)\\/image\\/(\\d+)$/
+      );
+      if (!m) throw new Error("Invalid web3 image URI");
+
+      const [, addr, chainId, imgId] = m;
+      if (Number(chainId) !== CHAIN_ID) throw new Error("Wrong chain");
+
+      const imgContract = new ethers.Contract(addr, ABI, provider);
+      const bytes = ethers.getBytes(await imgContract.image(BigInt(imgId)));
+      img.src = URL.createObjectURL(new Blob([bytes], { type: "image/webp" }));
+      return;
+    }
+
+    if (parsed.image) {
+      img.src = parsed.image;
+    }
+
+  } catch (err) {
+    out.textContent = "ERROR: " + err.message;
   }
-
-  $("load").addEventListener("click", loadToken);
-
-})();
+}
 </script>
 
 </body>
